@@ -211,13 +211,16 @@
     const open=activeTableOrder(table);
     if(!open)return `<div class="table-lock">🪑 ${esc(table)} · Chưa có đơn đang mở — đơn mới sẽ được tạo khi quý khách gọi món</div>`;
     const summary=customerOrderSummary(open);
-    if(customerTableChoice==='add')return summary+`<div class="table-lock">➕ Món chọn bên dưới sẽ được gọi thêm vào đơn ${esc(open.code)}</div>`;
-    if(customerTableChoice==='new')return `<div class="table-lock">🆕 Khách mới tại ${esc(table)} · Sẽ tạo một đơn mới riêng</div>`;
-    return summary+`<div class="table-session-box"><h3>🪑 ${esc(table)} đang có phiên phục vụ</h3><p>Nếu đây vẫn là bàn của quý khách, chọn <b>Gọi thêm món</b>. Nếu khách trước đã rời bàn nhưng quán chưa đóng đơn, chọn <b>Tôi là khách mới</b>.</p><div class="table-session-actions"><button class="btn primary" onclick="chooseTableSession('add')">＋ Gọi thêm món</button><button class="btn ghost" onclick="chooseTableSession('new')">Tôi là khách mới</button></div></div>`;
+    if(customerTableChoice==='add')return `<div class="table-lock">➕ KHÁCH CŨ · Tiếp tục gọi món cho ${esc(table)}</div>`+summary;
+    if(customerTableChoice==='new')return `<div class="table-lock">🆕 KHÁCH MỚI · Mở phiên mới tại ${esc(table)}</div>`;
+    return `<div class="table-session-box"><h3>🪑 ${esc(table)} đang có đơn chưa thanh toán</h3><p>Vui lòng chọn trước khi gọi món:</p><div class="table-session-actions"><button class="btn primary" onclick="chooseTableSession('add')">👤 KHÁCH CŨ — Gọi thêm</button><button class="btn ghost" onclick="chooseTableSession('new')">🆕 KHÁCH MỚI — Mở bàn mới</button></div></div>`+summary;
   }
   function chooseTableSession(choice){
     const table=normalizeTable(customerTableParam),open=activeTableOrder(table);
-    customerTableChoice=choice;orderDraft.tableAddress=table;orderDraft.orderType='Tại quán';renderNewOrder();
+    customerTableChoice=choice;orderDraft.tableAddress=table;orderDraft.orderType='Tại quán';
+    if(choice==='add'&&open){orderDraft.customerName=open.customerName||'Khách lẻ';orderDraft.customerPhone=open.customerPhone||'';orderDraft.customerAddress=open.customerAddress||''}
+    if(choice==='new'){orderDraft.customerName='';orderDraft.customerPhone='';orderDraft.customerAddress='';}
+    renderNewOrder();
   }
   window.chooseTableSession=chooseTableSession;
 
@@ -225,9 +228,13 @@
     const cats=['all',...new Set(state.products.map(p=>p.category))],visible=state.products.filter(p=>(menuCategory==='all'||p.category===menuCategory)&&p.name.toLowerCase().includes(menuSearch.toLowerCase())),selected=state.products.filter(p=>(cart[p.id]||0)>0),total=selected.reduce((s,p)=>s+p.price*cart[p.id],0);
     const employeeControl=!isAdmin()?`<input id="orderEmployee" value="${esc(currentUser.employeeName||currentUser.username)}" disabled>`:`<select id="orderEmployee">${state.employees.map(e=>`<option>${esc(e)}</option>`).join('')}</select>`;
     const knownCustomers=[...state.customers].sort((a,b)=>(a.name||'').localeCompare(b.name||'','vi'));
-    document.getElementById('neworder').innerHTML=heading('Quầy bán hàng',editingOrderId?'Sửa đơn hàng':'Tạo đơn mới',editingOrderId?'<span class="draft-tag">Đang sửa đơn đã lưu</span>':'')+`<div class="menu-layout"><div class="card"><div class="menu-tools"><input id="menuSearch" placeholder="Tìm món..." value="${esc(menuSearch)}"><div class="chips">${cats.map(c=>`<button class="chip ${menuCategory===c?'active':''}" onclick="setMenuCategory('${c}')">${c==='all'?'Tất cả':esc(c)}</button>`).join('')}</div></div><div class="menu-grid">${visible.map(p=>{const q=cart[p.id]||0;return`<div class="product-card ${q?'selected':''}"><div class="product-name">${esc(p.name)}</div><div class="product-foot"><span class="product-price">${money(p.price)}</span><div class="qty"><button onclick="changeQty('${p.id}',-1)">−</button><input type="number" min="0" step="1" inputmode="numeric" value="${q}" aria-label="Số lượng ${esc(p.name)}" onclick="this.select()" onchange="setQty('${p.id}',this.value)"><button class="plus" onclick="changeQty('${p.id}',1)">＋</button></div></div></div>`}).join('')}</div></div>
+    const openTableOrder=customerMode&&customerTableParam?activeTableOrder(customerTableParam):null;
+    const lockCustomerIdentity=Boolean(customerMode&&customerTableParam&&customerTableChoice==='add'&&openTableOrder);
+    if(lockCustomerIdentity){orderDraft.customerName=openTableOrder.customerName||'Khách lẻ';orderDraft.customerPhone=openTableOrder.customerPhone||'';orderDraft.customerAddress=openTableOrder.customerAddress||'';orderDraft.tableAddress=normalizeTable(customerTableParam);orderDraft.orderType='Tại quán';}
+    const tableSessionTop=customerMode&&customerTableParam?renderCustomerTableSessionBox():'';
+    document.getElementById('neworder').innerHTML=heading('Quầy bán hàng',editingOrderId?'Sửa đơn hàng':'Tạo đơn mới',editingOrderId?'<span class="draft-tag">Đang sửa đơn đã lưu</span>':'')+tableSessionTop+`<div class="menu-layout"><div class="card"><div class="menu-tools"><input id="menuSearch" placeholder="Tìm món..." value="${esc(menuSearch)}"><div class="chips">${cats.map(c=>`<button class="chip ${menuCategory===c?'active':''}" onclick="setMenuCategory('${c}')">${c==='all'?'Tất cả':esc(c)}</button>`).join('')}</div></div><div class="menu-grid">${visible.map(p=>{const q=cart[p.id]||0;return`<div class="product-card ${q?'selected':''}"><div class="product-name">${esc(p.name)}</div><div class="product-foot"><span class="product-price">${money(p.price)}</span><div class="qty"><button onclick="changeQty('${p.id}',-1)">−</button><input type="number" min="0" step="1" inputmode="numeric" value="${q}" aria-label="Số lượng ${esc(p.name)}" onclick="this.select()" onchange="setQty('${p.id}',this.value)"><button class="plus" onclick="changeQty('${p.id}',1)">＋</button></div></div></div>`}).join('')}</div></div>
       <div class="order-panel"><h2 class="card-title">Thông tin đơn hàng</h2><div class="cart">${selected.length?selected.map(p=>`<div class="cart-row"><b>${cart[p.id]}×</b><span>${esc(p.name)}</span><b>${money(p.price*cart[p.id])}</b><button onclick="removeCart('${p.id}')">×</button></div>`).join(''):'<div class="empty" style="padding:24px 10px">Chưa chọn món</div>'}</div><div class="order-total"><span>Tổng thanh toán</span><strong>${money(total)}</strong></div>
-      ${customerMode?`${customerTableParam?renderCustomerTableSessionBox():''}<div class="form-grid"><div class="field"><label>Tên khách hàng</label><input id="customerName" placeholder="Tên của quý khách"></div><div class="field"><label>Số điện thoại</label><input id="customerPhone" inputmode="tel" placeholder="Số điện thoại"></div><div class="field"><label>Loại đơn</label><select id="orderType" ${customerTableParam?'disabled':''}><option>Tại quán</option><option>Mang về</option></select></div><div class="field"><label>Số bàn</label><input id="tableAddress" placeholder="Ví dụ: Bàn 05" ${customerTableParam?`value="${esc(normalizeTable(customerTableParam))}" readonly`:''}></div><div class="field full"><label>Ghi chú món ăn</label><textarea id="orderNote" placeholder="Ví dụ: không cay, không hành..."></textarea></div></div><input type="hidden" id="orderDate"><input type="hidden" id="orderEmployee" value="Khách tự đặt"><input type="hidden" id="customerAddress"><input type="hidden" id="payment" value="Thanh toán tại quán"><input type="hidden" id="orderStatus" value="Chưa thanh toán"><select id="existingCustomer" class="hidden"><option value=""></option></select><input type="checkbox" id="saveCustomer" class="hidden"><button class="btn primary" style="width:100%;margin-top:14px" ${selected.length?'':'disabled'} onclick="createOrder()">✓ Đặt món</button>`:`<div class="customer-picker"><div class="field"><label>Chọn khách hàng thân thiết</label><select id="existingCustomer" onchange="fillCustomer(this.value)" ${knownCustomers.length?'':'disabled'}><option value="">${knownCustomers.length?'Khách mới / khách lẻ':'Chưa có khách hàng đã lưu'}</option>${knownCustomers.map(c=>`<option value="${c.id}">${esc(c.name)} · ${esc(c.phone)}</option>`).join('')}</select></div></div><div class="form-grid"><div class="field"><label>Ngày bán *</label><input type="date" id="orderDate"></div><div class="field"><label>Nhân viên nhập đơn *</label>${employeeControl}</div><div class="field"><label>Tên khách hàng</label><input id="customerName" placeholder="Khách lẻ"></div><div class="field"><label>Số điện thoại</label><input id="customerPhone" inputmode="tel" placeholder="09xx..."></div><div class="field full"><label>Địa chỉ khách hàng</label><input id="customerAddress" placeholder="Địa chỉ giao dịch / nơi ở"></div><div class="field"><label>Loại đơn</label><select id="orderType"><option>Tại quán</option><option>Mang về</option></select></div><div class="field"><label>Số bàn</label><input id="tableAddress" placeholder="Ví dụ: Bàn 05"></div><div class="field"><label>Thanh toán</label><select id="payment"><option>Tiền mặt</option><option>Chuyển khoản</option></select></div><div class="field"><label>Trạng thái</label><select id="orderStatus"><option>Đã thanh toán</option><option>Chưa thanh toán</option></select></div><div class="field full"><label>Ghi chú</label><textarea id="orderNote" placeholder="Yêu cầu của khách..."></textarea></div></div><label class="check-row"><input type="checkbox" id="saveCustomer"> Lưu hoặc cập nhật khách hàng thân thiết khi có tên và số điện thoại</label><button class="btn primary" style="width:100%;margin-top:14px" ${selected.length?'':'disabled'} onclick="createOrder()">✓ ${editingOrderId?'Xem trước bản cập nhật':'Xem trước đơn hàng'}</button>`}</div></div>`;
+      ${customerMode?`<div class="form-grid"><div class="field"><label>Tên khách hàng${lockCustomerIdentity?' (giữ theo đơn hiện tại)':''}</label><input id="customerName" placeholder="Tên của quý khách" ${lockCustomerIdentity?'readonly':''}></div><div class="field"><label>Số điện thoại</label><input id="customerPhone" inputmode="tel" placeholder="Số điện thoại" ${lockCustomerIdentity?'readonly':''}></div><div class="field"><label>Loại đơn</label><select id="orderType" ${customerTableParam?'disabled':''}><option>Tại quán</option><option>Mang về</option></select></div><div class="field"><label>Số bàn</label><input id="tableAddress" placeholder="Ví dụ: Bàn 05" ${customerTableParam?`value="${esc(normalizeTable(customerTableParam))}" readonly`:''}></div><div class="field full"><label>Ghi chú món ăn</label><textarea id="orderNote" placeholder="Ví dụ: không cay, không hành..."></textarea></div></div><input type="hidden" id="orderDate"><input type="hidden" id="orderEmployee" value="Khách tự đặt"><input type="hidden" id="customerAddress"><input type="hidden" id="payment" value="Thanh toán tại quán"><input type="hidden" id="orderStatus" value="Chưa thanh toán"><select id="existingCustomer" class="hidden"><option value=""></option></select><input type="checkbox" id="saveCustomer" class="hidden"><button class="btn primary" style="width:100%;margin-top:14px" ${selected.length?'':'disabled'} onclick="createOrder()">✓ Đặt món</button>`:`<div class="customer-picker"><div class="field"><label>Chọn khách hàng thân thiết</label><select id="existingCustomer" onchange="fillCustomer(this.value)" ${knownCustomers.length?'':'disabled'}><option value="">${knownCustomers.length?'Khách mới / khách lẻ':'Chưa có khách hàng đã lưu'}</option>${knownCustomers.map(c=>`<option value="${c.id}">${esc(c.name)} · ${esc(c.phone)}</option>`).join('')}</select></div></div><div class="form-grid"><div class="field"><label>Ngày bán *</label><input type="date" id="orderDate"></div><div class="field"><label>Nhân viên nhập đơn *</label>${employeeControl}</div><div class="field"><label>Tên khách hàng</label><input id="customerName" placeholder="Khách lẻ"></div><div class="field"><label>Số điện thoại</label><input id="customerPhone" inputmode="tel" placeholder="09xx..."></div><div class="field full"><label>Địa chỉ khách hàng</label><input id="customerAddress" placeholder="Địa chỉ giao dịch / nơi ở"></div><div class="field"><label>Loại đơn</label><select id="orderType"><option>Tại quán</option><option>Mang về</option></select></div><div class="field"><label>Số bàn</label><input id="tableAddress" placeholder="Ví dụ: Bàn 05"></div><div class="field"><label>Thanh toán</label><select id="payment"><option>Tiền mặt</option><option>Chuyển khoản</option></select></div><div class="field"><label>Trạng thái</label><select id="orderStatus"><option>Đã thanh toán</option><option>Chưa thanh toán</option></select></div><div class="field full"><label>Ghi chú</label><textarea id="orderNote" placeholder="Yêu cầu của khách..."></textarea></div></div><label class="check-row"><input type="checkbox" id="saveCustomer"> Lưu hoặc cập nhật khách hàng thân thiết khi có tên và số điện thoại</label><button class="btn primary" style="width:100%;margin-top:14px" ${selected.length?'':'disabled'} onclick="createOrder()">✓ ${editingOrderId?'Xem trước bản cập nhật':'Xem trước đơn hàng'}</button>`}</div></div>`;
     restoreOrderDraft();
     document.getElementById('menuSearch').oninput=e=>{captureOrderDraft();menuSearch=e.target.value;const pos=e.target.selectionStart;renderNewOrder();const n=document.getElementById('menuSearch');if(n){n.focus();n.setSelectionRange(pos,pos)}};
   }
@@ -250,11 +257,13 @@
     if(customerMode&&customerTableParam&&activeTableOrder(customerTableParam)&&!customerTableChoice)return toast('Hãy chọn “Gọi thêm món” hoặc “Tôi là khách mới” trước khi đặt món');
     const items=state.products.filter(p=>(cart[p.id]||0)>0).map(p=>({productId:p.id,name:p.name,category:p.category,qty:cart[p.id],price:p.price,cost:p.cost||0}));if(!items.length)return toast('Hãy chọn ít nhất một món');
     const existing=editingOrderId?state.orders.find(o=>o.id===editingOrderId):null,emp=isAdmin()?(orderDraft.employee||state.employees[0]):(currentUser.employeeName||currentUser.username);if(!emp)return toast('Hãy chọn nhân viên nhập đơn');
-    const d=orderDraft.date||today(),stamp=d.replaceAll('-',''),code=existing?.code||('DH-'+stamp+'-'+String(state.sequence).padStart(4,'0')),customerName=(orderDraft.customerName||'').trim()||'Khách lẻ',customerPhone=(orderDraft.customerPhone||'').trim(),customerAddress=(orderDraft.customerAddress||'').trim();
+    const d=orderDraft.date||today(),stamp=d.replaceAll('-',''),code=existing?.code||('DH-'+stamp+'-'+String(state.sequence).padStart(4,'0'));
+    const tableOpenForAdd=customerMode&&customerTableParam&&customerTableChoice==='add'?activeTableOrder(customerTableParam):null;
+    const customerName=tableOpenForAdd?(tableOpenForAdd.customerName||'Khách lẻ'):((orderDraft.customerName||'').trim()||'Khách lẻ'),customerPhone=tableOpenForAdd?(tableOpenForAdd.customerPhone||''):(orderDraft.customerPhone||'').trim(),customerAddress=tableOpenForAdd?(tableOpenForAdd.customerAddress||''):(orderDraft.customerAddress||'').trim();
     pendingOrder={id:existing?.id||Date.now(),code,date:d,time:existing?.time||new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'}),employee:emp,customerName,customerPhone,customerAddress,orderType:(customerMode&&customerTableParam)?'Tại quán':(orderDraft.orderType||'Tại quán'),tableAddress:(customerMode&&customerTableParam)?normalizeTable(customerTableParam):(orderDraft.tableAddress||'').trim(),payment:customerMode?'Thanh toán tại quán':(orderDraft.payment||'Tiền mặt'),status:customerMode?'Chưa thanh toán':(orderDraft.status||'Đã thanh toán'),note:(orderDraft.note||'').trim(),items,total:items.reduce((s,i)=>s+i.qty*i.price,0),tableSessionActive:customerMode&&customerTableParam?true:undefined,_customerTableAction:customerMode&&customerTableParam?(customerTableChoice||'new'):null,_saveCustomer:orderDraft.saveCustomer!==false};
     showReceipt(pendingOrder,'preview');
   }
-  function savePendingOrder(){
+  async function savePendingOrder(){
     if(!pendingOrder)return;
     const action=pendingOrder._customerTableAction,table=normalizeTable(pendingOrder.tableAddress);
     const order={...pendingOrder};delete order._saveCustomer;delete order._customerTableAction;
@@ -281,8 +290,11 @@
       else{state.orders.unshift(order);state.sequence++}
     }
     if(pendingOrder._saveCustomer&&order.customerName!=='Khách lẻ'&&order.customerPhone)upsertCustomer(order.customerName,order.customerPhone,order.customerAddress);
-    const code=savedOrder.code,wasEdit=Boolean(editingOrderId);pendingOrder=null;editingOrderId=null;save();document.getElementById('receiptModal').classList.remove('show');resetOrderDraft();
-    if(customerMode){showCustomerSuccess(savedOrder,isAdd);return}
+    const code=savedOrder.code,wasEdit=Boolean(editingOrderId);
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+    if(window.firebaseSaveState){try{await window.firebaseSaveState(state)}catch(e){console.error('Firebase save:',e);toast('Đã lưu trên máy nhưng chưa đồng bộ được với quán')}}
+    pendingOrder=null;editingOrderId=null;document.getElementById('receiptModal').classList.remove('show');resetOrderDraft();
+    if(customerMode){customerTableChoice='add';showCustomerSuccess(savedOrder,isAdd);return}
     toast(wasEdit?'Đã cập nhật đơn '+code:'Đã lưu đơn '+code);go('dashboard')
   }
   function showCustomerSuccess(order,isAdd=false){
@@ -293,7 +305,13 @@
   }
   function newCustomerOrder(){
     document.getElementById('receiptModal').classList.remove('show');resetOrderDraft();
-    if(customerMode&&customerTableParam&&activeTableOrder(customerTableParam))customerTableChoice='add';
+    if(customerMode&&customerTableParam){
+      const open=activeTableOrder(customerTableParam);
+      if(open){
+        customerTableChoice='add';
+        orderDraft={tableAddress:normalizeTable(customerTableParam),orderType:'Tại quán',customerName:open.customerName||'Khách lẻ',customerPhone:open.customerPhone||'',customerAddress:open.customerAddress||'',payment:'Thanh toán tại quán',status:'Chưa thanh toán'};
+      }else customerTableChoice=null;
+    }
     go('neworder');
   }
   function discardPendingOrder(){document.getElementById('receiptModal').classList.remove('show');resetOrderDraft();renderNewOrder();toast('Đã đóng và xóa nội dung đơn chưa lưu')}
@@ -399,15 +417,7 @@
 
       window.firebaseSaveState = async (data) => {
         if (applyingRemote) return;
-        clearTimeout(saveTimer);
-        return new Promise((resolve, reject) => {
-          saveTimer = setTimeout(async () => {
-            try {
-              await setDoc(sharedRef, { payload: JSON.parse(JSON.stringify(data)), updatedAt: serverTimestamp() });
-              resolve();
-            } catch (e) { reject(e); }
-          }, 250);
-        });
+        await setDoc(sharedRef, { payload: JSON.parse(JSON.stringify(data)), updatedAt: serverTimestamp() });
       };
 
       const first = await getDoc(sharedRef);
